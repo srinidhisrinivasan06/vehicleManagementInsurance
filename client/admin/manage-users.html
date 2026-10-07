@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Manage Users - AutoServe</title>
+  <link rel="stylesheet" href="../css/style.css"/>
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="logo">🔧 AutoServe <span style="font-size:0.75rem;background:#fee2e2;color:#991b1b;padding:0.2rem 0.5rem;border-radius:4px;margin-left:0.5rem;">ADMIN</span></div>
+  <div class="nav-links">
+    <span id="userName" style="font-weight:600;"></span>
+    <button class="btn btn-outline btn-sm" onclick="logout()">Logout</button>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-label">Admin Panel</div>
+    <a href="dashboard.html">🏠 Dashboard</a>
+    <a href="manage-bookings.html">📅 Manage Bookings</a>
+    <a href="manage-users.html" class="active">👥 Manage Users</a>
+    <a href="manage-services.html">🛠️ Services & Slots</a>
+  </aside>
+
+  <main class="main-content">
+    <div class="page-header flex-between">
+      <div>
+        <h1>Manage Users</h1>
+        <p>View and manage all registered users.</p>
+      </div>
+    </div>
+
+    <div class="card mb-2" style="padding:1rem;">
+      <div style="display:flex;gap:1rem;flex-wrap:wrap;align-items:flex-end;">
+        <div class="form-group" style="margin:0;flex:1;min-width:150px;">
+          <label>Filter by Role</label>
+          <select id="filterRole" class="form-control" onchange="loadUsers()">
+            <option value="">All Roles</option>
+            <option value="CUSTOMER">Customers</option>
+            <option value="PROVIDER">Providers</option>
+            <option value="ADMIN">Admins</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin:0;flex:2;min-width:200px;">
+          <label>Search</label>
+          <input type="text" id="searchInput" class="form-control" placeholder="Name or email..." oninput="loadUsers()"/>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr><th>ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Joined</th><th>Status</th><th>Actions</th></tr>
+          </thead>
+          <tbody id="usersTable">
+            <tr><td colspan="8" class="text-center text-muted" style="padding:2rem;">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="../js/api.js"></script>
+<script>
+  const user = requireAuth('ADMIN');
+  if (user) {
+    document.getElementById('userName').textContent = user.firstName + ' ' + user.lastName;
+    loadUsers();
+  }
+
+  async function loadUsers() {
+    const role   = document.getElementById('filterRole').value;
+    const search = document.getElementById('searchInput').value;
+    let url = '/admin/users?';
+    if (role)   url += 'role=' + role + '&';
+    if (search) url += 'search=' + encodeURIComponent(search);
+    try {
+      const users = await api.get(url);
+      const tbody = document.getElementById('usersTable');
+      if (!users.length) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted" style="padding:2rem;">No users found.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = users.map(u => `
+        <tr>
+          <td>#${u.id}</td>
+          <td>${u.firstName} ${u.lastName}</td>
+          <td>${u.email}</td>
+          <td>${u.phone || '—'}</td>
+          <td><span class="badge ${u.role === 'ADMIN' ? 'badge-cancelled' : u.role === 'PROVIDER' ? 'badge-confirmed' : 'badge-completed'}">${u.role}</span></td>
+          <td>${new Date(u.createdAt).toLocaleDateString()}</td>
+          <td><span class="badge ${u.active ? 'badge-completed' : 'badge-cancelled'}">${u.active ? 'Active' : 'Inactive'}</span></td>
+          <td>
+            <button class="btn btn-sm ${u.active ? 'btn-warning' : 'btn-success'}" onclick="toggleUser(${u.id}, ${u.active})">
+              ${u.active ? 'Deactivate' : 'Activate'}
+            </button>
+          </td>
+        </tr>
+      `).join('');
+    } catch { showToast('Failed to load users', 'error'); }
+  }
+
+  async function toggleUser(id, isActive) {
+    try {
+      await api.put('/admin/users/' + id + '/toggle');
+      showToast('User ' + (isActive ? 'deactivated' : 'activated') + '.', 'success');
+      loadUsers();
+    } catch (err) { showToast(err.message, 'error'); }
+  }
+</script>
+</body>
+</html>

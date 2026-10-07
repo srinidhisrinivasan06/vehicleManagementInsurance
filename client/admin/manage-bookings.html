@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Manage Bookings - AutoServe</title>
+  <link rel="stylesheet" href="../css/style.css"/>
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="logo">🔧 AutoServe <span style="font-size:0.75rem;background:#fee2e2;color:#991b1b;padding:0.2rem 0.5rem;border-radius:4px;margin-left:0.5rem;">ADMIN</span></div>
+  <div class="nav-links">
+    <span id="userName" style="font-weight:600;"></span>
+    <button class="btn btn-outline btn-sm" onclick="logout()">Logout</button>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-label">Admin Panel</div>
+    <a href="dashboard.html">🏠 Dashboard</a>
+    <a href="manage-bookings.html" class="active">📅 Manage Bookings</a>
+    <a href="manage-users.html">👥 Manage Users</a>
+    <a href="manage-services.html">🛠️ Services & Slots</a>
+  </aside>
+
+  <main class="main-content">
+    <div class="page-header">
+      <h1>Manage Bookings</h1>
+      <p>View, assign, and update all service bookings.</p>
+    </div>
+
+    <div class="card mb-2" style="padding:1rem;">
+      <div style="display:flex;gap:1rem;flex-wrap:wrap;align-items:flex-end;">
+        <div class="form-group" style="margin:0;flex:1;min-width:150px;">
+          <label>Filter by Status</label>
+          <select id="filterStatus" class="form-control" onchange="loadBookings()">
+            <option value="">All</option>
+            <option value="PENDING">Pending</option>
+            <option value="CONFIRMED">Confirmed</option>
+            <option value="IN_PROGRESS">In Progress</option>
+            <option value="COMPLETED">Completed</option>
+            <option value="CANCELLED">Cancelled</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin:0;flex:1;min-width:150px;">
+          <label>Search</label>
+          <input type="text" id="searchInput" class="form-control" placeholder="Customer name or vehicle..." oninput="loadBookings()"/>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr><th>ID</th><th>Customer</th><th>Service</th><th>Vehicle</th><th>Date</th><th>Provider</th><th>Status</th><th>Actions</th></tr>
+          </thead>
+          <tbody id="bookingsTable">
+            <tr><td colspan="8" class="text-center text-muted" style="padding:2rem;">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- Update Booking Modal -->
+<div class="modal-overlay" id="updateModal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Update Booking #<span id="modalBookingId"></span></span>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="form-group">
+      <label>Assign Provider</label>
+      <select id="providerSelect" class="form-control">
+        <option value="">-- Select Provider --</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Update Status</label>
+      <select id="statusSelect" class="form-control">
+        <option value="PENDING">Pending</option>
+        <option value="CONFIRMED">Confirmed</option>
+        <option value="IN_PROGRESS">In Progress</option>
+        <option value="QUALITY_CHECK">Quality Check</option>
+        <option value="COMPLETED">Completed</option>
+        <option value="CANCELLED">Cancelled</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Admin Notes</label>
+      <textarea id="adminNotes" class="form-control" rows="2" placeholder="Optional notes..."></textarea>
+    </div>
+    <div style="display:flex;gap:1rem;justify-content:flex-end;">
+      <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveUpdate()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<script src="../js/api.js"></script>
+<script>
+  const user = requireAuth('ADMIN');
+  if (user) {
+    document.getElementById('userName').textContent = user.firstName + ' ' + user.lastName;
+    loadBookings();
+    loadProviders();
+  }
+
+  let currentBookingId = null;
+
+  async function loadBookings() {
+    const status = document.getElementById('filterStatus').value;
+    const search = document.getElementById('searchInput').value;
+    let url = '/admin/bookings?';
+    if (status) url += 'status=' + status + '&';
+    if (search) url += 'search=' + encodeURIComponent(search);
+    try {
+      const bookings = await api.get(url);
+      const tbody = document.getElementById('bookingsTable');
+      if (!bookings.length) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted" style="padding:2rem;">No bookings found.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = bookings.map(b => `
+        <tr>
+          <td>#${b.id}</td>
+          <td>${b.customerName}</td>
+          <td>${b.serviceType.replace(/_/g,' ')}</td>
+          <td>${b.vehicleMake} ${b.vehicleModel}<br><small class="text-muted">${b.vehicleNumber}</small></td>
+          <td>${new Date(b.scheduledDate).toLocaleDateString()}</td>
+          <td>${b.providerName || '<span class="text-muted">Unassigned</span>'}</td>
+          <td><span class="badge badge-${b.status.toLowerCase().replace(/_/g,'-')}">${b.status.replace(/_/g,' ')}</span></td>
+          <td><button class="btn btn-primary btn-sm" onclick="openUpdate(${b.id}, '${b.status}', ${b.providerId || null})">Update</button></td>
+        </tr>
+      `).join('');
+    } catch { showToast('Failed to load bookings', 'error'); }
+  }
+
+  async function loadProviders() {
+    try {
+      const providers = await api.get('/admin/providers');
+      const sel = document.getElementById('providerSelect');
+      providers.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.textContent = p.firstName + ' ' + p.lastName;
+        sel.appendChild(opt);
+      });
+    } catch {}
+  }
+
+  function openUpdate(id, status, providerId) {
+    currentBookingId = id;
+    document.getElementById('modalBookingId').textContent = id;
+    document.getElementById('statusSelect').value = status;
+    document.getElementById('providerSelect').value = providerId || '';
+    document.getElementById('adminNotes').value = '';
+    document.getElementById('updateModal').classList.add('open');
+  }
+
+  function closeModal() {
+    document.getElementById('updateModal').classList.remove('open');
+    currentBookingId = null;
+  }
+
+  async function saveUpdate() {
+    try {
+      await api.put('/admin/bookings/' + currentBookingId, {
+        status:     document.getElementById('statusSelect').value,
+        providerId: document.getElementById('providerSelect').value || null,
+        notes:      document.getElementById('adminNotes').value
+      });
+      showToast('Booking updated!', 'success');
+      closeModal();
+      loadBookings();
+    } catch (err) { showToast(err.message, 'error'); }
+  }
+</script>
+</body>
+</html>

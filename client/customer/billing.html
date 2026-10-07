@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Billing - AutoServe</title>
+  <link rel="stylesheet" href="../css/style.css"/>
+  <style>
+    .invoice-box { max-width: 700px; background: var(--white); border: 1px solid var(--border); border-radius: var(--radius); padding: 2rem; }
+    .invoice-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2rem; }
+    .invoice-logo { font-size: 1.5rem; font-weight: 800; color: var(--primary); }
+    .invoice-meta { text-align: right; }
+    .invoice-meta h2 { font-size: 1.8rem; color: var(--text-muted); font-weight: 300; }
+    .invoice-parties { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem; }
+    .invoice-parties h4 { font-size: 0.75rem; text-transform: uppercase; color: var(--text-muted); margin-bottom: 0.5rem; }
+    .line-items { width: 100%; border-collapse: collapse; margin-bottom: 1.5rem; }
+    .line-items th, .line-items td { padding: 0.75rem; border-bottom: 1px solid var(--border); }
+    .line-items th { background: var(--bg); font-size: 0.8rem; text-transform: uppercase; color: var(--text-muted); }
+    .totals { text-align: right; }
+    .totals table { margin-left: auto; }
+    .totals td { padding: 0.3rem 0.75rem; }
+    .totals .grand-total td { font-size: 1.1rem; font-weight: 700; border-top: 2px solid var(--text); }
+  </style>
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="logo">🔧 AutoServe</div>
+  <div class="nav-links">
+    <span id="userName" style="font-weight:600;"></span>
+    <button class="btn btn-outline btn-sm" onclick="logout()">Logout</button>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-label">Menu</div>
+    <a href="dashboard.html">🏠 Dashboard</a>
+    <a href="book-service.html">📅 Book Service</a>
+    <a href="track-service.html">📍 Track Service</a>
+    <a href="history.html">📋 Service History</a>
+    <a href="billing.html" class="active">🧾 Billing</a>
+  </aside>
+
+  <main class="main-content">
+    <div class="page-header">
+      <h1>Billing & Invoices</h1>
+      <p>View and download your service invoices.</p>
+    </div>
+
+    <!-- Invoice list -->
+    <div id="invoiceList">
+      <div class="card">
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr><th>Invoice #</th><th>Service</th><th>Date</th><th>Amount</th><th>Status</th><th>Action</th></tr>
+            </thead>
+            <tbody id="invoiceTable">
+              <tr><td colspan="6" class="text-center text-muted" style="padding:2rem;">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Invoice detail -->
+    <div id="invoiceDetail" style="display:none;">
+      <div style="margin-bottom:1rem;">
+        <button class="btn btn-outline btn-sm" onclick="showList()">← Back to Invoices</button>
+        <button class="btn btn-primary btn-sm" onclick="window.print()" style="margin-left:0.5rem;">🖨 Print Invoice</button>
+      </div>
+      <div class="invoice-box" id="invoiceContent">
+        <div class="invoice-header">
+          <div>
+            <div class="invoice-logo">🔧 AutoServe</div>
+            <p class="text-muted" style="font-size:0.85rem;">Vehicle Service Management</p>
+          </div>
+          <div class="invoice-meta">
+            <h2>INVOICE</h2>
+            <p id="invNumber" style="font-weight:600;"></p>
+            <p id="invDate" class="text-muted"></p>
+          </div>
+        </div>
+        <div class="invoice-parties">
+          <div>
+            <h4>Billed To</h4>
+            <p id="customerName" style="font-weight:600;"></p>
+            <p id="customerEmail" class="text-muted"></p>
+            <p id="customerPhone" class="text-muted"></p>
+          </div>
+          <div>
+            <h4>Service Details</h4>
+            <p id="invVehicle" style="font-weight:600;"></p>
+            <p id="invProvider" class="text-muted"></p>
+          </div>
+        </div>
+        <table class="line-items">
+          <thead><tr><th>Description</th><th>Qty</th><th>Unit Price</th><th>Total</th></tr></thead>
+          <tbody id="lineItems"></tbody>
+        </table>
+        <div class="totals">
+          <table>
+            <tr><td>Subtotal</td><td id="subtotal"></td></tr>
+            <tr><td>Tax (10%)</td><td id="tax"></td></tr>
+            <tr class="grand-total"><td>Total</td><td id="grandTotal"></td></tr>
+          </table>
+        </div>
+        <div style="margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border);">
+          <p id="invStatus" class="text-muted" style="font-size:0.85rem;"></p>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="../js/api.js"></script>
+<script>
+  const user = requireAuth('CUSTOMER');
+  if (user) {
+    document.getElementById('userName').textContent = user.firstName + ' ' + user.lastName;
+    loadInvoices();
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('id')) loadInvoiceDetail(params.get('id'));
+
+  async function loadInvoices() {
+    try {
+      const invoices = await api.get('/billing/my');
+      const tbody = document.getElementById('invoiceTable');
+      if (!invoices.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted" style="padding:2rem;">No invoices yet.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = invoices.map(inv => `
+        <tr>
+          <td>#INV-${inv.id}</td>
+          <td>${inv.serviceType.replace(/_/g,' ')}</td>
+          <td>${new Date(inv.createdAt).toLocaleDateString()}</td>
+          <td>$${inv.totalAmount.toFixed(2)}</td>
+          <td><span class="badge badge-${inv.paymentStatus.toLowerCase()}">${inv.paymentStatus}</span></td>
+          <td><button class="btn btn-outline btn-sm" onclick="loadInvoiceDetail(${inv.id})">View</button></td>
+        </tr>
+      `).join('');
+    } catch { showToast('Failed to load invoices', 'error'); }
+  }
+
+  async function loadInvoiceDetail(id) {
+    try {
+      const inv = await api.get('/billing/' + id);
+      document.getElementById('invoiceList').style.display = 'none';
+      document.getElementById('invoiceDetail').style.display = 'block';
+
+      document.getElementById('invNumber').textContent   = '#INV-' + inv.id;
+      document.getElementById('invDate').textContent     = new Date(inv.createdAt).toLocaleDateString();
+      document.getElementById('customerName').textContent = inv.customerName;
+      document.getElementById('customerEmail').textContent = inv.customerEmail;
+      document.getElementById('customerPhone').textContent = inv.customerPhone;
+      document.getElementById('invVehicle').textContent  = inv.vehicleMake + ' ' + inv.vehicleModel + ' (' + inv.vehicleNumber + ')';
+      document.getElementById('invProvider').textContent = 'Provider: ' + (inv.providerName || 'N/A');
+
+      const subtotal = inv.totalAmount / 1.1;
+      const tax = inv.totalAmount - subtotal;
+      document.getElementById('subtotal').textContent  = '$' + subtotal.toFixed(2);
+      document.getElementById('tax').textContent       = '$' + tax.toFixed(2);
+      document.getElementById('grandTotal').textContent = '$' + inv.totalAmount.toFixed(2);
+      document.getElementById('invStatus').textContent  = 'Payment Status: ' + inv.paymentStatus;
+
+      document.getElementById('lineItems').innerHTML = (inv.lineItems || [{
+        description: inv.serviceType.replace(/_/g,' '), quantity: 1, unitPrice: subtotal
+      }]).map(item => `
+        <tr>
+          <td>${item.description}</td>
+          <td>${item.quantity}</td>
+          <td>$${item.unitPrice.toFixed(2)}</td>
+          <td>$${(item.quantity * item.unitPrice).toFixed(2)}</td>
+        </tr>
+      `).join('');
+    } catch { showToast('Failed to load invoice', 'error'); }
+  }
+
+  function showList() {
+    document.getElementById('invoiceList').style.display = 'block';
+    document.getElementById('invoiceDetail').style.display = 'none';
+  }
+</script>
+</body>
+</html>

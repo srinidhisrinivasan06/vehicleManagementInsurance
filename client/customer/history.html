@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Service History - AutoServe</title>
+  <link rel="stylesheet" href="../css/style.css"/>
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="logo">🔧 AutoServe</div>
+  <div class="nav-links">
+    <span id="userName" style="font-weight:600;"></span>
+    <button class="btn btn-outline btn-sm" onclick="logout()">Logout</button>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-label">Menu</div>
+    <a href="dashboard.html">🏠 Dashboard</a>
+    <a href="book-service.html">📅 Book Service</a>
+    <a href="track-service.html">📍 Track Service</a>
+    <a href="history.html" class="active">📋 Service History</a>
+    <a href="billing.html">🧾 Billing</a>
+  </aside>
+
+  <main class="main-content">
+    <div class="page-header flex-between">
+      <div>
+        <h1>Service History</h1>
+        <p>All your past and upcoming vehicle services.</p>
+      </div>
+      <div style="display:flex;gap:0.5rem;">
+        <select id="filterStatus" class="form-control" style="width:auto;" onchange="loadHistory()">
+          <option value="">All Status</option>
+          <option value="PENDING">Pending</option>
+          <option value="CONFIRMED">Confirmed</option>
+          <option value="IN_PROGRESS">In Progress</option>
+          <option value="COMPLETED">Completed</option>
+          <option value="CANCELLED">Cancelled</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Service</th>
+              <th>Vehicle</th>
+              <th>Date</th>
+              <th>Provider</th>
+              <th>Status</th>
+              <th>Amount</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="historyTable">
+            <tr><td colspan="8" class="text-center text-muted" style="padding:2rem;">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- Cancel Modal -->
+<div class="modal-overlay" id="cancelModal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Cancel Booking</span>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <p>Are you sure you want to cancel booking <strong id="cancelId"></strong>?</p>
+    <div style="display:flex;gap:1rem;margin-top:1.5rem;justify-content:flex-end;">
+      <button class="btn btn-outline" onclick="closeModal()">No, Keep It</button>
+      <button class="btn btn-danger" onclick="confirmCancel()">Yes, Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script src="../js/api.js"></script>
+<script>
+  const user = requireAuth('CUSTOMER');
+  if (user) {
+    document.getElementById('userName').textContent = user.firstName + ' ' + user.lastName;
+    loadHistory();
+  }
+
+  let cancelBookingId = null;
+
+  async function loadHistory() {
+    const status = document.getElementById('filterStatus').value;
+    const url = '/bookings/my' + (status ? '?status=' + status : '');
+    try {
+      const bookings = await api.get(url);
+      const tbody = document.getElementById('historyTable');
+      if (!bookings.length) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted" style="padding:2rem;">No bookings found.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = bookings.map(b => `
+        <tr>
+          <td>#${b.id}</td>
+          <td>${b.serviceType.replace(/_/g,' ')}</td>
+          <td>${b.vehicleMake} ${b.vehicleModel}<br><small class="text-muted">${b.vehicleNumber}</small></td>
+          <td>${new Date(b.scheduledDate).toLocaleDateString()}</td>
+          <td>${b.providerName || '—'}</td>
+          <td><span class="badge badge-${b.status.toLowerCase().replace(/_/g,'-')}">${b.status.replace(/_/g,' ')}</span></td>
+          <td>${b.amount ? '$' + b.amount.toFixed(2) : '—'}</td>
+          <td style="display:flex;gap:0.4rem;">
+            <a href="track-service.html?id=${b.id}" class="btn btn-outline btn-sm">Track</a>
+            ${b.status === 'PENDING' ? `<button class="btn btn-danger btn-sm" onclick="openCancel(${b.id})">Cancel</button>` : ''}
+            ${b.status === 'COMPLETED' ? `<a href="billing.html?id=${b.id}" class="btn btn-success btn-sm">Invoice</a>` : ''}
+          </td>
+        </tr>
+      `).join('');
+    } catch (err) {
+      showToast('Failed to load history', 'error');
+    }
+  }
+
+  function openCancel(id) {
+    cancelBookingId = id;
+    document.getElementById('cancelId').textContent = '#' + id;
+    document.getElementById('cancelModal').classList.add('open');
+  }
+
+  function closeModal() {
+    document.getElementById('cancelModal').classList.remove('open');
+    cancelBookingId = null;
+  }
+
+  async function confirmCancel() {
+    try {
+      await api.put('/bookings/' + cancelBookingId + '/cancel');
+      showToast('Booking cancelled.', 'success');
+      closeModal();
+      loadHistory();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  }
+</script>
+</body>
+</html>

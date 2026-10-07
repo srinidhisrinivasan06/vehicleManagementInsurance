@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Book Service - AutoServe</title>
+  <link rel="stylesheet" href="../css/style.css"/>
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="logo">🔧 AutoServe</div>
+  <div class="nav-links">
+    <span id="userName" style="font-weight:600;"></span>
+    <button class="btn btn-outline btn-sm" onclick="logout()">Logout</button>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-label">Menu</div>
+    <a href="dashboard.html">🏠 Dashboard</a>
+    <a href="book-service.html" class="active">📅 Book Service</a>
+    <a href="track-service.html">📍 Track Service</a>
+    <a href="history.html">📋 Service History</a>
+    <a href="billing.html">🧾 Billing</a>
+  </aside>
+
+  <main class="main-content">
+    <div class="page-header">
+      <h1>Book a Service</h1>
+      <p>Fill in the details below to schedule your vehicle service.</p>
+    </div>
+
+    <div class="card" style="max-width:700px;">
+      <form id="bookingForm">
+
+        <div class="card-header">
+          <span class="card-title">Vehicle Details</span>
+        </div>
+
+        <div class="grid-2" style="margin-top:1rem;">
+          <div class="form-group">
+            <label>Vehicle Make</label>
+            <input type="text" id="vehicleMake" class="form-control" placeholder="e.g. Toyota" required/>
+          </div>
+          <div class="form-group">
+            <label>Vehicle Model</label>
+            <input type="text" id="vehicleModel" class="form-control" placeholder="e.g. Camry" required/>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="form-group">
+            <label>Vehicle Number</label>
+            <input type="text" id="vehicleNumber" class="form-control" placeholder="e.g. ABC-1234" required/>
+          </div>
+          <div class="form-group">
+            <label>Year</label>
+            <input type="number" id="vehicleYear" class="form-control" placeholder="e.g. 2020" min="1990" max="2025" required/>
+          </div>
+        </div>
+
+        <div style="border-top:1px solid var(--border);margin:1rem 0;padding-top:1rem;">
+          <span class="card-title">Service Details</span>
+        </div>
+
+        <div class="form-group">
+          <label>Service Type</label>
+          <select id="serviceType" class="form-control" required>
+            <option value="">-- Select Service --</option>
+            <option value="OIL_CHANGE">Oil Change</option>
+            <option value="TIRE_ROTATION">Tire Rotation</option>
+            <option value="BRAKE_SERVICE">Brake Service</option>
+            <option value="ENGINE_TUNE_UP">Engine Tune-Up</option>
+            <option value="AC_SERVICE">AC Service</option>
+            <option value="BATTERY_REPLACEMENT">Battery Replacement</option>
+            <option value="FULL_INSPECTION">Full Inspection</option>
+            <option value="TRANSMISSION_SERVICE">Transmission Service</option>
+          </select>
+        </div>
+
+        <div class="grid-2">
+          <div class="form-group">
+            <label>Preferred Date</label>
+            <input type="date" id="preferredDate" class="form-control" required/>
+          </div>
+          <div class="form-group">
+            <label>Available Slots</label>
+            <select id="timeSlot" class="form-control" required>
+              <option value="">-- Pick a date first --</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Additional Notes</label>
+          <textarea id="notes" class="form-control" rows="3" placeholder="Describe any issues or special requests..."></textarea>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-lg btn-block">Confirm Booking</button>
+      </form>
+    </div>
+  </main>
+</div>
+
+<script src="../js/api.js"></script>
+<script>
+  const user = requireAuth('CUSTOMER');
+  if (user) document.getElementById('userName').textContent = user.firstName + ' ' + user.lastName;
+
+  // Set min date to today
+  document.getElementById('preferredDate').min = new Date().toISOString().split('T')[0];
+
+  document.getElementById('preferredDate').addEventListener('change', async (e) => {
+    const date = e.target.value;
+    const slotSelect = document.getElementById('timeSlot');
+    slotSelect.innerHTML = '<option>Loading slots...</option>';
+    try {
+      const slots = await api.get('/slots/available?date=' + date);
+      if (!slots.length) {
+        slotSelect.innerHTML = '<option value="">No slots available</option>';
+        return;
+      }
+      slotSelect.innerHTML = '<option value="">-- Select a slot --</option>' +
+        slots.map(s => `<option value="${s.id}">${s.startTime} - ${s.endTime}</option>`).join('');
+    } catch {
+      slotSelect.innerHTML = '<option value="">Failed to load slots</option>';
+    }
+  });
+
+  document.getElementById('bookingForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = e.target.querySelector('button[type=submit]');
+    btn.textContent = 'Booking...';
+    btn.disabled = true;
+    try {
+      const booking = await api.post('/bookings', {
+        vehicleMake:   document.getElementById('vehicleMake').value,
+        vehicleModel:  document.getElementById('vehicleModel').value,
+        vehicleNumber: document.getElementById('vehicleNumber').value,
+        vehicleYear:   parseInt(document.getElementById('vehicleYear').value),
+        serviceType:   document.getElementById('serviceType').value,
+        slotId:        document.getElementById('timeSlot').value,
+        scheduledDate: document.getElementById('preferredDate').value,
+        notes:         document.getElementById('notes').value
+      });
+      showToast('Booking confirmed! ID: #' + booking.id, 'success');
+      setTimeout(() => window.location.href = 'track-service.html?id=' + booking.id, 1500);
+    } catch (err) {
+      showToast(err.message, 'error');
+      btn.textContent = 'Confirm Booking';
+      btn.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>

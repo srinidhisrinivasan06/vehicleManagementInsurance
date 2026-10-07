@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Provider Dashboard - AutoServe</title>
+  <link rel="stylesheet" href="../css/style.css"/>
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="logo">🔧 AutoServe <span style="font-size:0.75rem;background:#dbeafe;color:#1e40af;padding:0.2rem 0.5rem;border-radius:4px;margin-left:0.5rem;">PROVIDER</span></div>
+  <div class="nav-links">
+    <span id="userName" style="font-weight:600;"></span>
+    <button class="btn btn-outline btn-sm" onclick="logout()">Logout</button>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-label">Provider Panel</div>
+    <a href="dashboard.html" class="active">🏠 Dashboard</a>
+    <a href="assigned-jobs.html">🔧 Assigned Jobs</a>
+  </aside>
+
+  <main class="main-content">
+    <div class="page-header">
+      <h1 id="welcomeMsg">Provider Dashboard</h1>
+      <p>Your assigned jobs and performance overview.</p>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-icon blue">🔧</div>
+        <div class="stat-info">
+          <div class="value" id="totalJobs">0</div>
+          <div class="label">Total Jobs</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon yellow">⏳</div>
+        <div class="stat-info">
+          <div class="value" id="activeJobs">0</div>
+          <div class="label">Active Jobs</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon green">✅</div>
+        <div class="stat-info">
+          <div class="value" id="completedJobs">0</div>
+          <div class="label">Completed</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon purple">📅</div>
+        <div class="stat-info">
+          <div class="value" id="todayJobs">0</div>
+          <div class="label">Today's Jobs</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Today's Jobs</span>
+        <a href="assigned-jobs.html" class="btn btn-outline btn-sm">View All</a>
+      </div>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr><th>ID</th><th>Customer</th><th>Service</th><th>Vehicle</th><th>Time Slot</th><th>Status</th><th>Action</th></tr>
+          </thead>
+          <tbody id="todayJobsTable">
+            <tr><td colspan="7" class="text-center text-muted" style="padding:2rem;">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="../js/api.js"></script>
+<script>
+  const user = requireAuth('PROVIDER');
+  if (user) {
+    document.getElementById('userName').textContent = user.firstName + ' ' + user.lastName;
+    document.getElementById('welcomeMsg').textContent = 'Welcome, ' + user.firstName + '!';
+    loadProviderDashboard();
+  }
+
+  async function loadProviderDashboard() {
+    try {
+      const stats = await api.get('/provider/stats');
+      document.getElementById('totalJobs').textContent     = stats.total || 0;
+      document.getElementById('activeJobs').textContent    = stats.active || 0;
+      document.getElementById('completedJobs').textContent = stats.completed || 0;
+      document.getElementById('todayJobs').textContent     = stats.today || 0;
+
+      const jobs = await api.get('/provider/jobs/today');
+      const tbody = document.getElementById('todayJobsTable');
+      if (!jobs.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted" style="padding:2rem;">No jobs scheduled for today.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = jobs.map(j => `
+        <tr>
+          <td>#${j.id}</td>
+          <td>${j.customerName}</td>
+          <td>${j.serviceType.replace(/_/g,' ')}</td>
+          <td>${j.vehicleMake} ${j.vehicleModel}<br><small class="text-muted">${j.vehicleNumber}</small></td>
+          <td>${j.slotTime || '—'}</td>
+          <td><span class="badge badge-${j.status.toLowerCase().replace(/_/g,'-')}">${j.status.replace(/_/g,' ')}</span></td>
+          <td><a href="assigned-jobs.html?id=${j.id}" class="btn btn-primary btn-sm">Update</a></td>
+        </tr>
+      `).join('');
+    } catch { showToast('Failed to load dashboard', 'error'); }
+  }
+</script>
+</body>
+</html>

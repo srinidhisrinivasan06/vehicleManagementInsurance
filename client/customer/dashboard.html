@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Dashboard - AutoServe</title>
+  <link rel="stylesheet" href="../css/style.css"/>
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="logo">🔧 AutoServe</div>
+  <div class="nav-links">
+    <span id="userName" style="font-weight:600;"></span>
+    <button class="btn btn-outline btn-sm" onclick="logout()">Logout</button>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-label">Menu</div>
+    <a href="dashboard.html" class="active">🏠 Dashboard</a>
+    <a href="book-service.html">📅 Book Service</a>
+    <a href="track-service.html">📍 Track Service</a>
+    <a href="history.html">📋 Service History</a>
+    <a href="billing.html">🧾 Billing</a>
+  </aside>
+
+  <main class="main-content">
+    <div class="page-header">
+      <h1 id="welcomeMsg">Welcome back!</h1>
+      <p>Here's an overview of your vehicle services.</p>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-icon blue">📅</div>
+        <div class="stat-info">
+          <div class="value" id="totalBookings">0</div>
+          <div class="label">Total Bookings</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon yellow">⏳</div>
+        <div class="stat-info">
+          <div class="value" id="activeServices">0</div>
+          <div class="label">Active Services</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon green">✅</div>
+        <div class="stat-info">
+          <div class="value" id="completedServices">0</div>
+          <div class="label">Completed</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon purple">💰</div>
+        <div class="stat-info">
+          <div class="value" id="totalSpent">$0</div>
+          <div class="label">Total Spent</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Recent Bookings</span>
+        <a href="book-service.html" class="btn btn-primary btn-sm">+ New Booking</a>
+      </div>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Booking ID</th>
+              <th>Service</th>
+              <th>Vehicle</th>
+              <th>Date</th>
+              <th>Status</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="bookingsTable">
+            <tr><td colspan="6" class="text-center text-muted" style="padding:2rem;">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="../js/api.js"></script>
+<script>
+  const user = requireAuth('CUSTOMER');
+  if (user) {
+    document.getElementById('userName').textContent = user.firstName + ' ' + user.lastName;
+    document.getElementById('welcomeMsg').textContent = 'Welcome back, ' + user.firstName + '!';
+    loadDashboard();
+  }
+
+  async function loadDashboard() {
+    try {
+      const stats = await api.get('/bookings/stats');
+      document.getElementById('totalBookings').textContent   = stats.total || 0;
+      document.getElementById('activeServices').textContent  = stats.active || 0;
+      document.getElementById('completedServices').textContent = stats.completed || 0;
+      document.getElementById('totalSpent').textContent      = '$' + (stats.totalSpent || 0).toFixed(2);
+
+      const bookings = await api.get('/bookings/my?limit=5');
+      const tbody = document.getElementById('bookingsTable');
+      if (!bookings.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted" style="padding:2rem;">No bookings yet. <a href="book-service.html">Book your first service</a></td></tr>';
+        return;
+      }
+      tbody.innerHTML = bookings.map(b => `
+        <tr>
+          <td>#${b.id}</td>
+          <td>${b.serviceType}</td>
+          <td>${b.vehicleModel} (${b.vehicleNumber})</td>
+          <td>${new Date(b.scheduledDate).toLocaleDateString()}</td>
+          <td><span class="badge badge-${b.status.toLowerCase().replace('_','-')}">${b.status}</span></td>
+          <td><a href="track-service.html?id=${b.id}" class="btn btn-outline btn-sm">Track</a></td>
+        </tr>
+      `).join('');
+    } catch (err) {
+      showToast('Failed to load dashboard', 'error');
+    }
+  }
+</script>
+</body>
+</html>

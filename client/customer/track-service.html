@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Track Service - AutoServe</title>
+  <link rel="stylesheet" href="../css/style.css"/>
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="logo">🔧 AutoServe</div>
+  <div class="nav-links">
+    <span id="userName" style="font-weight:600;"></span>
+    <button class="btn btn-outline btn-sm" onclick="logout()">Logout</button>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-label">Menu</div>
+    <a href="dashboard.html">🏠 Dashboard</a>
+    <a href="book-service.html">📅 Book Service</a>
+    <a href="track-service.html" class="active">📍 Track Service</a>
+    <a href="history.html">📋 Service History</a>
+    <a href="billing.html">🧾 Billing</a>
+  </aside>
+
+  <main class="main-content">
+    <div class="page-header">
+      <h1>Track Service</h1>
+      <p>Real-time status of your vehicle service.</p>
+    </div>
+
+    <!-- Search by booking ID -->
+    <div class="card mb-2" style="max-width:500px;">
+      <div class="flex-between gap-2">
+        <input type="text" id="searchId" class="form-control" placeholder="Enter Booking ID..."/>
+        <button class="btn btn-primary" onclick="loadBooking()">Track</button>
+      </div>
+    </div>
+
+    <div id="trackingResult" style="display:none;">
+      <div class="card mb-2">
+        <div class="card-header">
+          <span class="card-title" id="bookingTitle">Booking #</span>
+          <span id="statusBadge" class="badge"></span>
+        </div>
+        <div class="grid-2">
+          <div>
+            <p class="text-muted">Vehicle</p>
+            <p id="vehicleInfo" style="font-weight:600;"></p>
+          </div>
+          <div>
+            <p class="text-muted">Service Type</p>
+            <p id="serviceInfo" style="font-weight:600;"></p>
+          </div>
+          <div>
+            <p class="text-muted">Scheduled Date</p>
+            <p id="dateInfo" style="font-weight:600;"></p>
+          </div>
+          <div>
+            <p class="text-muted">Assigned Provider</p>
+            <p id="providerInfo" style="font-weight:600;"></p>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Service Progress</span>
+        </div>
+        <div class="progress-tracker" id="progressTracker">
+          <div class="tracker-step">
+            <div class="step-circle" id="step1">1</div>
+            <div class="step-label" id="label1">Booked</div>
+          </div>
+          <div class="tracker-step">
+            <div class="step-circle" id="step2">2</div>
+            <div class="step-label" id="label2">Confirmed</div>
+          </div>
+          <div class="tracker-step">
+            <div class="step-circle" id="step3">3</div>
+            <div class="step-label" id="label3">In Progress</div>
+          </div>
+          <div class="tracker-step">
+            <div class="step-circle" id="step4">4</div>
+            <div class="step-label" id="label4">Quality Check</div>
+          </div>
+          <div class="tracker-step">
+            <div class="step-circle" id="step5">5</div>
+            <div class="step-label" id="label5">Completed</div>
+          </div>
+        </div>
+
+        <div id="statusNotes" style="margin-top:1rem;padding:1rem;background:var(--bg);border-radius:var(--radius);"></div>
+      </div>
+    </div>
+
+    <div id="noResult" style="display:none;" class="card text-center" style="padding:3rem;">
+      <p style="font-size:3rem;">🔍</p>
+      <p style="font-weight:600;margin-top:1rem;">No booking found</p>
+      <p class="text-muted">Check the booking ID and try again.</p>
+    </div>
+  </main>
+</div>
+
+<script src="../js/api.js"></script>
+<script>
+  const user = requireAuth('CUSTOMER');
+  if (user) document.getElementById('userName').textContent = user.firstName + ' ' + user.lastName;
+
+  const statusStepMap = {
+    'PENDING': 1, 'CONFIRMED': 2, 'IN_PROGRESS': 3, 'QUALITY_CHECK': 4, 'COMPLETED': 5
+  };
+
+  // Auto-load if booking ID in URL
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('id')) {
+    document.getElementById('searchId').value = params.get('id');
+    loadBooking();
+  }
+
+  async function loadBooking() {
+    const id = document.getElementById('searchId').value.trim();
+    if (!id) return;
+    try {
+      const b = await api.get('/bookings/' + id);
+      document.getElementById('trackingResult').style.display = 'block';
+      document.getElementById('noResult').style.display = 'none';
+
+      document.getElementById('bookingTitle').textContent = 'Booking #' + b.id;
+      document.getElementById('vehicleInfo').textContent  = b.vehicleMake + ' ' + b.vehicleModel + ' (' + b.vehicleNumber + ')';
+      document.getElementById('serviceInfo').textContent  = b.serviceType.replace(/_/g, ' ');
+      document.getElementById('dateInfo').textContent     = new Date(b.scheduledDate).toLocaleDateString();
+      document.getElementById('providerInfo').textContent = b.providerName || 'Not assigned yet';
+
+      const badge = document.getElementById('statusBadge');
+      badge.textContent = b.status.replace(/_/g, ' ');
+      badge.className = 'badge badge-' + b.status.toLowerCase().replace(/_/g, '-');
+
+      const currentStep = statusStepMap[b.status] || 1;
+      for (let i = 1; i <= 5; i++) {
+        const circle = document.getElementById('step' + i);
+        const label  = document.getElementById('label' + i);
+        circle.className = 'step-circle' + (i < currentStep ? ' done' : i === currentStep ? ' active' : '');
+        label.className  = 'step-label'  + (i < currentStep ? ' done' : i === currentStep ? ' active' : '');
+        if (i < currentStep)  circle.textContent = '✓';
+        else circle.textContent = i;
+      }
+
+      document.getElementById('statusNotes').innerHTML =
+        b.notes ? '<strong>Notes:</strong> ' + b.notes : '<span class="text-muted">No additional notes.</span>';
+    } catch {
+      document.getElementById('trackingResult').style.display = 'none';
+      document.getElementById('noResult').style.display = 'block';
+    }
+  }
+</script>
+</body>
+</html>

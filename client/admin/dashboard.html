@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Admin Dashboard - AutoServe</title>
+  <link rel="stylesheet" href="../css/style.css"/>
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="logo">🔧 AutoServe <span style="font-size:0.75rem;background:#fee2e2;color:#991b1b;padding:0.2rem 0.5rem;border-radius:4px;margin-left:0.5rem;">ADMIN</span></div>
+  <div class="nav-links">
+    <span id="userName" style="font-weight:600;"></span>
+    <button class="btn btn-outline btn-sm" onclick="logout()">Logout</button>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-label">Admin Panel</div>
+    <a href="dashboard.html" class="active">🏠 Dashboard</a>
+    <a href="manage-bookings.html">📅 Manage Bookings</a>
+    <a href="manage-users.html">👥 Manage Users</a>
+    <a href="manage-services.html">🛠️ Services & Slots</a>
+  </aside>
+
+  <main class="main-content">
+    <div class="page-header">
+      <h1>Admin Dashboard</h1>
+      <p>Overview of all operations.</p>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-icon blue">📅</div>
+        <div class="stat-info">
+          <div class="value" id="totalBookings">0</div>
+          <div class="label">Total Bookings</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon yellow">⏳</div>
+        <div class="stat-info">
+          <div class="value" id="pendingBookings">0</div>
+          <div class="label">Pending</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon green">✅</div>
+        <div class="stat-info">
+          <div class="value" id="completedBookings">0</div>
+          <div class="label">Completed</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon purple">👥</div>
+        <div class="stat-info">
+          <div class="value" id="totalUsers">0</div>
+          <div class="label">Total Users</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon blue">🛠️</div>
+        <div class="stat-info">
+          <div class="value" id="totalProviders">0</div>
+          <div class="label">Providers</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon green">💰</div>
+        <div class="stat-info">
+          <div class="value" id="totalRevenue">$0</div>
+          <div class="label">Total Revenue</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Recent Bookings</span>
+        <a href="manage-bookings.html" class="btn btn-outline btn-sm">View All</a>
+      </div>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr><th>ID</th><th>Customer</th><th>Service</th><th>Vehicle</th><th>Date</th><th>Status</th><th>Action</th></tr>
+          </thead>
+          <tbody id="recentBookings">
+            <tr><td colspan="7" class="text-center text-muted" style="padding:2rem;">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="../js/api.js"></script>
+<script>
+  const user = requireAuth('ADMIN');
+  if (user) {
+    document.getElementById('userName').textContent = user.firstName + ' ' + user.lastName;
+    loadAdminDashboard();
+  }
+
+  async function loadAdminDashboard() {
+    try {
+      const stats = await api.get('/admin/stats');
+      document.getElementById('totalBookings').textContent    = stats.totalBookings || 0;
+      document.getElementById('pendingBookings').textContent  = stats.pendingBookings || 0;
+      document.getElementById('completedBookings').textContent = stats.completedBookings || 0;
+      document.getElementById('totalUsers').textContent       = stats.totalUsers || 0;
+      document.getElementById('totalProviders').textContent   = stats.totalProviders || 0;
+      document.getElementById('totalRevenue').textContent     = '$' + (stats.totalRevenue || 0).toFixed(2);
+
+      const bookings = await api.get('/admin/bookings?limit=5');
+      const tbody = document.getElementById('recentBookings');
+      if (!bookings.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted" style="padding:2rem;">No bookings yet.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = bookings.map(b => `
+        <tr>
+          <td>#${b.id}</td>
+          <td>${b.customerName}</td>
+          <td>${b.serviceType.replace(/_/g,' ')}</td>
+          <td>${b.vehicleModel} (${b.vehicleNumber})</td>
+          <td>${new Date(b.scheduledDate).toLocaleDateString()}</td>
+          <td><span class="badge badge-${b.status.toLowerCase().replace(/_/g,'-')}">${b.status.replace(/_/g,' ')}</span></td>
+          <td><a href="manage-bookings.html?id=${b.id}" class="btn btn-outline btn-sm">Manage</a></td>
+        </tr>
+      `).join('');
+    } catch (err) {
+      showToast('Failed to load dashboard', 'error');
+    }
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Services & Slots - AutoServe</title>
+  <link rel="stylesheet" href="../css/style.css"/>
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="logo">🔧 AutoServe <span style="font-size:0.75rem;background:#fee2e2;color:#991b1b;padding:0.2rem 0.5rem;border-radius:4px;margin-left:0.5rem;">ADMIN</span></div>
+  <div class="nav-links">
+    <span id="userName" style="font-weight:600;"></span>
+    <button class="btn btn-outline btn-sm" onclick="logout()">Logout</button>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-label">Admin Panel</div>
+    <a href="dashboard.html">🏠 Dashboard</a>
+    <a href="manage-bookings.html">📅 Manage Bookings</a>
+    <a href="manage-users.html">👥 Manage Users</a>
+    <a href="manage-services.html" class="active">🛠️ Services & Slots</a>
+  </aside>
+
+  <main class="main-content">
+    <div class="page-header">
+      <h1>Services & Slots</h1>
+      <p>Manage available time slots for bookings.</p>
+    </div>
+
+    <div class="card mb-2">
+      <div class="card-header">
+        <span class="card-title">Add Time Slot</span>
+      </div>
+      <form id="slotForm" style="display:flex;gap:1rem;flex-wrap:wrap;align-items:flex-end;">
+        <div class="form-group" style="margin:0;flex:1;min-width:150px;">
+          <label>Date</label>
+          <input type="date" id="slotDate" class="form-control" required/>
+        </div>
+        <div class="form-group" style="margin:0;flex:1;min-width:120px;">
+          <label>Start Time</label>
+          <input type="time" id="startTime" class="form-control" required/>
+        </div>
+        <div class="form-group" style="margin:0;flex:1;min-width:120px;">
+          <label>End Time</label>
+          <input type="time" id="endTime" class="form-control" required/>
+        </div>
+        <div class="form-group" style="margin:0;flex:1;min-width:100px;">
+          <label>Capacity</label>
+          <input type="number" id="capacity" class="form-control" value="1" min="1" required/>
+        </div>
+        <button type="submit" class="btn btn-primary">Add Slot</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Available Slots</span>
+        <div style="display:flex;gap:0.5rem;">
+          <input type="date" id="filterDate" class="form-control" style="width:auto;" onchange="loadSlots()"/>
+        </div>
+      </div>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr><th>ID</th><th>Date</th><th>Start Time</th><th>End Time</th><th>Capacity</th><th>Booked</th><th>Status</th><th>Action</th></tr>
+          </thead>
+          <tbody id="slotsTable">
+            <tr><td colspan="8" class="text-center text-muted" style="padding:2rem;">Select a date to view slots.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="../js/api.js"></script>
+<script>
+  const user = requireAuth('ADMIN');
+  if (user) {
+    document.getElementById('userName').textContent = user.firstName + ' ' + user.lastName;
+    document.getElementById('slotDate').min = new Date().toISOString().split('T')[0];
+    document.getElementById('filterDate').value = new Date().toISOString().split('T')[0];
+    loadSlots();
+  }
+
+  document.getElementById('slotForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      await api.post('/admin/slots', {
+        date:      document.getElementById('slotDate').value,
+        startTime: document.getElementById('startTime').value,
+        endTime:   document.getElementById('endTime').value,
+        capacity:  parseInt(document.getElementById('capacity').value)
+      });
+      showToast('Slot added!', 'success');
+      e.target.reset();
+      loadSlots();
+    } catch (err) { showToast(err.message, 'error'); }
+  });
+
+  async function loadSlots() {
+    const date = document.getElementById('filterDate').value;
+    if (!date) return;
+    try {
+      const slots = await api.get('/admin/slots?date=' + date);
+      const tbody = document.getElementById('slotsTable');
+      if (!slots.length) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted" style="padding:2rem;">No slots for this date.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = slots.map(s => `
+        <tr>
+          <td>#${s.id}</td>
+          <td>${new Date(s.date).toLocaleDateString()}</td>
+          <td>${s.startTime}</td>
+          <td>${s.endTime}</td>
+          <td>${s.capacity}</td>
+          <td>${s.booked}</td>
+          <td><span class="badge ${s.booked >= s.capacity ? 'badge-cancelled' : 'badge-completed'}">${s.booked >= s.capacity ? 'Full' : 'Available'}</span></td>
+          <td><button class="btn btn-danger btn-sm" onclick="deleteSlot(${s.id})">Delete</button></td>
+        </tr>
+      `).join('');
+    } catch { showToast('Failed to load slots', 'error'); }
+  }
+
+  async function deleteSlot(id) {
+    if (!confirm('Delete this slot?')) return;
+    try {
+      await api.delete('/admin/slots/' + id);
+      showToast('Slot deleted.', 'success');
+      loadSlots();
+    } catch (err) { showToast(err.message, 'error'); }
+  }
+</script>
+</body>
+</html>
